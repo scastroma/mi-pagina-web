@@ -1,0 +1,644 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulación de Ciudad - Vías y Energía</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+
+        
+        /* Estilo general del cuerpo */
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+        }
+
+        /* Contenedor de la barra de energía */
+        h1 {
+            font-size: 24px; /* Tamaño de fuente */
+            color: #333; /* Color del texto */
+            margin-bottom: 10px; /* Espaciado debajo del título */
+        }
+
+        .energy-bar-container {
+            width: 500px;
+            height: 30px;
+            background-color: #ddd;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            overflow: hidden;
+            border: 2px solid black;
+        }
+
+        /* Barra de energía (variable) */
+        .energy-bar {
+            height: 100%;
+            width: 100%; /* Comienza llena */
+            background-color: #FFFF00; /* Verde */
+            transition: width 0.2s;
+        }
+
+        /* Mapa principal */
+        .map {
+            position: relative;
+            width: 500px;
+            height: 500px;
+            background-color: #e0e0e0;
+            border: 2px solid black;
+        }
+
+        /* Carreteras generales */
+        .road {
+            position: absolute;
+            background-color: #808080;
+        }
+
+        /* Calles verticales */
+        .vertical-road {
+            width: 30px;
+            height: 500px;
+        }
+
+        .vertical-road-1 { left: 115px; top: 0; }
+        .vertical-road-2 { left: 235px; top: 0; }
+        .vertical-road-3 { left: 355px; top: 0; }
+        .vertical-road-4 { left: 0px; top: 0; }
+        .vertical-road-5 { left: 470px; top: 0; }
+
+        /* Calles horizontales */
+        .horizontal-road {
+            width: 500px;
+            height: 30px;
+        }
+
+        .horizontal-road-1 { top: 115px; left: 0; }
+        .horizontal-road-2 { top: 235px; left: 0; }
+        .horizontal-road-3 { top: 355px; left: 0; }
+        .horizontal-road-4 { top: 0px; left: 0; }
+        .horizontal-road-5 { top: 470px; left: 0; }
+
+        /* Vía de acceso desde la izquierda */
+        .entry-road {
+            width: 100px;
+            height: 30px;
+            top: 235px;
+            left: -100px;
+            background-color: #FF5722;
+        }
+
+        /* Vía de salida hacia la derecha */
+        .exit-road {
+            width: 100px;
+            height: 30px;
+            top: 235px;
+            left: 500px;
+            background-color: #4CAF50;
+        }
+
+        /* Estilo del coche */
+        #car {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            background-color: blue;
+            border-radius: 5px;
+            top: 235px; /* Misma altura que la vía de entrada */
+            left: 0px;  /* Inicio de la vía de entrada */
+        }
+
+        /* Estilo de las estaciones de carga */
+        .station {
+            position: absolute;
+            width: 15px;
+            height: 15px;
+            background-color: yellow;
+            border-radius: 50%;
+        }
+
+       /* Estilo para la estación de reseteo */
+       /* .reset-station {
+            position: absolute;
+            width: 15px;
+            height: 15px;
+            background-color: #4CAF50;
+            border-radius: 50%;
+        }
+
+        /* Estilo para el indicador de dinero */
+        .money-indicator {
+            margin-bottom: 10px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+        }
+
+
+        
+        /* Estilo para el cartel de precio de la estación */
+        .price-tag {
+            position: absolute;
+            background-color: #fff; /* Fondo blanco */
+            border: 1px solid #333; /* Borde oscuro */
+            padding: 2px 5px; /* Espaciado interno */
+            font-size: 12px; /* Tamaño de fuente */
+            color: #333; /* Color del texto */
+            transform: translate(-50%, -100%); /* Centrar el cartel sobre la estación */
+            white-space: nowrap; /* Evitar que el texto se divida */
+        }
+    </style>
+    <!-- <script src="/socket.io/socket.io.js"></script> -->
+</head>
+<body>
+    <h1>Energy Level</h1> <!-- Título sobre la barra de energía -->
+    <div class="energy-bar-container">
+        <div class="energy-bar" id="energy-bar"></div>
+    </div>
+
+    
+
+    <div class="money-indicator" id="money-indicator">Budget: $100</div> <!-- Indicador de dinero -->
+
+    <div class="map" id="map">
+        <!-- Calles verticales (cuadrícula interna) -->
+        <div class="road vertical-road vertical-road-1"></div>
+        <div class="road vertical-road vertical-road-2"></div>
+        <div class="road vertical-road vertical-road-3"></div>
+        <div class="road vertical-road vertical-road-4"></div>
+        <div class="road vertical-road vertical-road-5"></div>
+
+        <!-- Calles horizontales (cuadrícula interna) -->
+        <div class="road horizontal-road horizontal-road-1"></div>
+        <div class="road horizontal-road horizontal-road-2"></div>
+        <div class="road horizontal-road horizontal-road-3"></div>
+        <div class="road horizontal-road horizontal-road-4"></div>
+        <div class="road horizontal-road horizontal-road-5"></div>
+
+        <!-- Vía de acceso (izquierda) -->
+        <div class="road entry-road" id="entry-road"></div>
+
+        <!-- Vía de salida (derecha) -->
+        <div class="road exit-road" id="exit-road"></div>
+
+        
+    </div>
+
+    <script>
+
+
+const socket = io();
+let playerId;
+let players = new Map();
+
+// Variables iniciales (will be set when receiving game state)
+let carPositionX;
+let carPositionY;
+let energy = 100;
+let money = 100;
+let numberstations = 1;
+let meanPrice = 30;
+let stationSize = 15;
+let velocity = 5;
+//let resetPosition = { x: 479, y: 242 };
+const mapSize = 500;
+const energyBar = document.getElementById('energy-bar');
+const moneyIndicator = document.getElementById('money-indicator');
+const map = document.getElementById('map');
+
+const getInitialParameters = async () => {
+    try {
+        const response = await fetch('/admin-parameters');
+        const initialParameters = await response.json();
+        stationSize = parseInt(initialParameters.stationSize);
+        numberstations = parseInt(initialParameters.stationCount);
+        meanPrice = parseFloat(initialParameters.meanPrice);
+        console.log('getting params from server successfully!');
+        console.log(numberstations);
+        createChargingStations(numberstations, meanPrice);
+    } catch (error) {
+        console.log('there was an issue getting values from server. Using default values...', error);
+    }
+}
+
+getInitialParameters();
+
+        // Handle initial game state
+        socket.on('gameState', (data) => {
+            playerId = data.playerId;
+            const currentPlayer = data.players.find(p => p.id === playerId);
+            
+            // Set initial position from server
+            carPositionX = currentPlayer.positionX;
+            carPositionY = currentPlayer.positionY;
+            
+            // Create all players including self
+            data.players.forEach(player => {
+                createPlayerCar(player);
+                players.set(player.id, player);
+            });
+            
+            createChargingStations(data.stations);
+        });
+
+        function createPlayerCar(player) {
+            const playerCar = document.createElement('div');
+            playerCar.id = `car-${player.id}`;  // Asegúrate de usar backticks para la interpolación
+            playerCar.className = 'car';
+            playerCar.style.position = 'absolute';
+            playerCar.style.width = '30px';
+            playerCar.style.height = '30px';
+            playerCar.style.borderRadius = '5px';
+            playerCar.style.left = player.positionX + "px";
+            playerCar.style.top = player.positionY + "px";
+            playerCar.style.backgroundColor = player.color;
+
+            map.appendChild(playerCar);
+        }
+
+        // Handle new player joining
+        socket.on('playerJoined', (player) => {
+            createPlayerCar(player);
+            players.set(player.id, player);
+        });
+
+        // Handle player movement
+        socket.on('playerMoved', (data) => {
+            const playerCar = document.getElementById(`car-${data.id}`); // Usar backticks aquí para interpolar el id
+            if (playerCar) {
+                playerCar.style.left = data.positionX + "px";
+                playerCar.style.top = data.positionY + "px";
+                if (players.has(data.id)) {
+                    const player = players.get(data.id);
+                    player.energy = data.energy;
+                }
+            }
+        });
+
+        socket.on('resetPlayer', (data) => {
+    const player = gameState.players.get(socket.id);
+    if (player) {
+        const station = gameState.stations[data.stationId];
+        
+        // Verificar si la estación existe
+        if (station) {
+            player.positionX = station.left;
+            player.positionY = station.top;
+
+            io.emit('playerReset', { 
+                id: socket.id,
+                positionX: player.positionX,
+                positionY: player.positionY
+            });
+        } else {
+            console.error('Estación no válida:', data.stationId);
+        }
+    }
+});
+
+        // Escuchar el evento 'gameState' para actualizar el estado del juego en los jugadores
+        socket.on('gameState', (gameState) => {
+        // Actualizar las estaciones de carga
+        updateStations(gameState.stations);
+        // Actualizar los jugadores
+        updatePlayers(gameState.players);
+});
+
+        // Función para actualizar las estaciones en el juego
+        function updateStations(stations) {
+            // Aquí puedes actualizar las estaciones en el mapa o en la interfaz de usuario
+            console.log('Updated stations:', stations);
+}
+
+        // Función para actualizar los jugadores en el juego
+        function updatePlayers(players) {
+            // Aquí puedes actualizar la lista de jugadores o cualquier otro dato relevante
+        console.log('Updated players:', players);
+}
+
+
+
+        // Escuchar evento 'playerReset' para mover al jugador
+        socket.on('playerReset', (data) => {
+            const playerCar = document.getElementById(`car-${playerId}`);
+            if (playerCar) {
+                playerCar.style.left = data.positionX + "px";
+                playerCar.style.top = data.positionY + "px";
+            }
+        });
+
+        socket.on('movePlayer', (data) => {
+    const player = gameState.players.get(socket.id);
+    if (player && player.energy > 0) {
+        player.positionX = data.positionX;
+        player.positionY = data.positionY;
+        player.energy = data.energy;
+        
+        // Llamar a la función checkForReset para verificar si el jugador toca la estación de reseteo
+        checkForReset(player.positionX, player.positionY);
+        
+        io.emit('playerMoved', {
+            id: socket.id,
+            positionX: player.positionX,
+            positionY: player.positionY,
+            energy: player.energy
+        });
+    }
+});
+
+const moveCar = (direction) => {
+    if (energy > 0) {
+        let moved = false;
+        let newX = carPositionX; // Posición horizontal propuesta
+        let newY = carPositionY; // Posición vertical propuesta
+
+        // Definir las vías como áreas válidas para moverse
+        const roads = [
+            // Carreteras verticales
+            { top: 0, left: 115, width: 30, height: 500 },
+            { top: 0, left: 235, width: 30, height: 500 },
+            { top: 0, left: 355, width: 30, height: 500 },
+            // Carreteras horizontales
+            { top: 115, left: 0, width: 500, height: 30 },
+            { top: 235, left: 0, width: 500, height: 30 },
+            { top: 355, left: 0, width: 500, height: 30 },
+        ];
+
+        // Proponer nueva posición según la dirección
+        switch (direction) {
+            case 'right':
+                newX += 5;
+                break;
+            case 'left':
+                newX -= 5;
+                break;
+            case 'up':
+                newY -= 5;
+                break;
+            case 'down':
+                newY += 5;
+                break;
+        }
+
+        // Verificar si la nueva posición está dentro de alguna carretera
+        const isOnRoad = roads.some(road => 
+            newX >= road.left &&
+            newX < road.left + road.width &&
+            newY >= road.top &&
+            newY < road.top + road.height
+        );
+
+        // Si está dentro de las vías, mover el coche
+        if (isOnRoad) {
+            carPositionX = newX;
+            carPositionY = newY;
+            moved = true;
+        }
+
+        if (moved) {
+            reduceEnergy(); // Reducir energía al moverse
+            const playerCar = document.getElementById(`car-${playerId}`);
+            if (playerCar) {
+                playerCar.style.left = carPositionX + "px";
+                playerCar.style.top = carPositionY + "px";
+            }
+
+            checkCollision(); // Verificar colisión con estaciones
+            checkForReset();  // Verificar si el jugador debe ser reseteado
+
+            // Emitir evento de movimiento al servidor
+            socket.emit('movePlayer', {
+                positionX: carPositionX,
+                positionY: carPositionY,
+                energy: energy
+            });
+        } else {
+            console.log("Movimiento inválido: fuera de las vías.");
+        }
+    } else {
+        alert("¡Tu energía se ha agotado! No puedes movilizarte.");
+    }
+};
+
+
+        // Update keyboard controls to handle all directions
+        window.addEventListener('keydown', (event) => {
+            switch(event.key) {
+                case 'ArrowRight':
+                    moveCar('right');
+                    break;
+                case 'ArrowLeft':
+                    moveCar('left');
+                    break;
+                case 'ArrowUp':
+                    moveCar('up');
+                    break;
+                case 'ArrowDown':
+                    moveCar('down');
+                    break;
+            }
+        });
+
+let isCharging = false;  // Bandera para controlar la carga de energía
+let chargingInProgress = false;  // Nuevo flag para asegurarse de que se carga solo una vez por paso
+let lastChargedStation = null;  // Guardamos la última estación cargada
+
+// Función mejorada para detectar colisiones con estaciones de carga
+const checkCollision = () => {
+    const stations = document.querySelectorAll('.station'); // Obtener todas las estaciones de carga
+    const car = document.getElementById(`car-${playerId}`);
+    if (!car) return; // Verificar que el coche existe
+
+    const carRect = car.getBoundingClientRect();
+
+    stations.forEach(station => {
+        const stationRect = station.getBoundingClientRect();
+
+        // Calcula el centro del coche
+        const carCenterX = carRect.left + carRect.width / 2;
+        const carCenterY = carRect.top + carRect.height / 2;
+
+        // Verificar colisión con tolerancia
+        const tolerance = 5; // Permite pequeñas imprecisiones en las posiciones
+        const isColliding =
+            carCenterX >= stationRect.left - tolerance &&
+            carCenterX <= stationRect.right + tolerance &&
+            carCenterY >= stationRect.top - tolerance &&
+            carCenterY <= stationRect.bottom + tolerance;
+
+        if (isColliding) {
+            const cost = parseInt(station.dataset.cost, 10); // Obtener el costo de la estación
+            if (!chargingInProgress && money >= cost && energy < 100) {
+                chargingInProgress = true; // Marca que la carga está en progreso
+
+                // Incrementar energía y reducir dinero
+                energy = Math.min(energy + 30, 100); // No excede 100
+                money -= cost;
+
+                // Actualizar UI
+                updateEnergyBar();
+                updateMoneyIndicator();
+
+                // Enviar datos al servidor
+                socket.emit('charge', { energy, money });
+
+                // Imprimir información de la estación en la consola
+                console.log(
+                    `Cargando en estación: Coordenadas (${station.style.top}, ${station.style.left}), Costo: $${cost}`
+                );
+
+                // Esperar un tiempo antes de permitir otra carga
+                setTimeout(() => {
+                    chargingInProgress = false;
+                }, 1000); // Tiempo en milisegundos
+            }
+        }
+    });
+};
+
+// Función para actualizar la barra de energía
+const updateEnergyBar = () => {
+    energyBar.style.width = energy + "%"; // Ajusta el ancho de la barra de energía
+};
+
+// Función para actualizar el indicador de dinero
+const updateMoneyIndicator = () => {
+    moneyIndicator.textContent = `Budget: $${money}`; // Actualiza el texto del dinero
+};
+
+// Reducir energía con el movimiento, más lentamente
+const reduceEnergy = () => {
+    if (energy > 0) {
+        energy -= 1;  // Reducir la energía más lentamente
+        updateEnergyBar();  // Actualiza la barra de energía
+    }
+};// Crear estaciones de carga en posiciones aleatorias dentro de las vías
+const createChargingStations = (stationCount = numberstations) => {
+    // const stationSize = stationSize; // Tamaño de la estación
+    const roads = [
+        // Define las áreas de las vías como objetos { top, left, width, height }
+        { top: 0, left: 115, width: 30, height: 500 },   // Vertical road 1
+        { top: 0, left: 235, width: 30, height: 500 },   // Vertical road 2
+        { top: 0, left: 355, width: 30, height: 500 },   // Vertical road 3
+        { top: 115, left: 0, width: 500, height: 30 },   // Horizontal road 1
+        { top: 235, left: 0, width: 500, height: 30 },   // Horizontal road 2
+    ];
+
+    // Función para generar precios cercanos a una media
+    const generatePrice = (mean) => {
+        const deviation = 10; // Máxima desviación permitida
+        const price = Math.round(mean + (Math.random() * deviation * 2 - deviation)); // Distribución uniforme
+        return Math.max(10, price); // Asegura que el precio no sea menor a 10
+    };
+
+    for (let i = 0; i < stationCount; i++) {
+        // Selecciona una carretera aleatoria
+        const road = roads[Math.floor(Math.random() * roads.length)];
+
+        // Genera coordenadas aleatorias dentro de la carretera
+        const top = road.top + Math.random() * (road.height - stationSize);
+        const left = road.left + Math.random() * (road.width - stationSize);
+
+        // Crea el elemento de la estación
+        const station = document.createElement('div');
+        station.className = 'station';
+        station.style.top = `${top}px`;
+        station.style.left = `${left}px`;
+        station.dataset.cost = generatePrice(meanPrice); // Generar precio basado en la media
+
+        // Agrega la estación al mapa
+        map.appendChild(station);
+
+        // Crear el cartel de precio
+        const priceTag = document.createElement('div');
+        priceTag.className = 'price-tag';
+        priceTag.textContent = `$${station.dataset.cost}`;
+        priceTag.style.top = `${top - 15}px`; // Posicionar el precio arriba de la estación
+        priceTag.style.left = `${left + stationSize / 2}px`; // Centrar el texto horizontalmente
+
+        map.appendChild(priceTag);
+    }
+};
+
+// Crear estación de reseteo
+const createResetStation = () => {
+    const resetStation = { top: 235, left: 495 }; // Coordenadas de la estación de reseteo
+
+    const resetElement = document.createElement('div');
+    resetElement.classList.add('reset-station');
+    resetElement.style.top = resetStation.top + 'px';
+    resetElement.style.left = resetStation.left + 'px';
+
+    document.getElementById('map').appendChild(resetElement);
+};
+
+// Llamar a la función para crear las estaciones de carga y reseteo
+// createChargingStations(numberstations, meanPrice);  // Crear estaciones de carga aleatorias
+createResetStation();  // Crear estación de reseteo
+
+ // Coordenada de reseteo (cuando el jugador llega aquí)
+const resetPosition = { x: 479, y: 242 }; 
+
+// Función de reseteo
+const resetPlayer = () => {
+    // Actualizar la posición del jugador a la coordenada de reseteo
+    carPositionX = resetPosition.x;
+    carPositionY = resetPosition.y;
+
+    // Actualiza la posición del coche en el mapa
+    const playerCar = document.getElementById(`car-${playerId}`);
+    if (playerCar) {
+        playerCar.style.left = carPositionX + "px";
+        playerCar.style.top = carPositionY + "px";
+    }
+
+
+
+    console.log(`Jugador reseteado a la posición: (${carPositionX}, ${carPositionY})`);
+};
+
+// Función para verificar si el jugador ha llegado a la coordenada de reseteo
+const checkForReset = () => {
+    const tolerance = 5;
+    if (Math.abs(carPositionX - resetPosition.x) < tolerance && Math.abs(carPositionY - resetPosition.y) < tolerance) {
+        resetPlayer();
+    }
+};
+
+
+    // Actualizar el estilo en el mapa
+    const playerCar = document.getElementById(`car-${playerId}`);
+    if (playerCar) {
+        playerCar.style.left = carPositionX + 'px';
+        playerCar.style.top = carPositionY + 'px';
+    }
+
+    // Emitir el evento de reseteo al servidor
+    socket.emit('resetPlayer', {
+        positionX: carPositionX,
+        positionY: carPositionY
+    });
+
+
+    // Función para actualizar la posición del marcador de reseteo
+    const updateResetMarkerPosition = () => {
+        const resetMarker = document.getElementById('resetMarker');
+        if (resetMarker) {
+            resetMarker.style.left = resetPosition.x + "px";
+            resetMarker.style.top = resetPosition.y + "px";
+        }
+    };
+
+    // Llamar a la función para actualizar la posición del marcador de reseteo
+    updateResetMarkerPosition();
+
+  
+
+    </script>
+</body>
+</html>
